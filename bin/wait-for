@@ -1,0 +1,128 @@
+#!/bin/bash
+
+set -euo pipefail
+
+help() {
+  cat << EOF
+Wait for TCP services to be available.
+
+Usage:
+  $(basename "$0") [OPTIONS] <host:port> [<host:port>...]
+  $(basename "$0") -h | --help
+
+Arguments:
+  <host:port>   Hostname (or IP address) and port number
+
+Options:
+  -t, --timeout <seconds>   Timeout in seconds
+  -h, --help                Show help message
+
+Exit status:
+  0   Services available
+  1   Timeout exceeded
+EOF
+}
+
+TIMEOUT=""
+SERVICES=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      help
+      exit 0
+      ;;
+
+    -t|--timeout)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: Missing timeout" >&2
+        echo "" >&2
+        help
+        exit 1
+      fi
+
+      if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+        echo "Error: Invalid timeout: $2" >&2
+        echo "" >&2
+        help
+        exit 1
+      fi
+
+      TIMEOUT="$2"
+      shift 2
+      ;;
+
+    -*)
+      echo "Error: Invalid option: $1" >&2
+      echo "" >&2
+      help
+      exit 1
+      ;;
+
+    *)
+      SERVICES+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${#SERVICES[@]} -eq 0 ]]; then
+  echo "Error: Missing services" >&2
+  echo "" >&2
+  help
+  exit 1
+fi
+
+for service in "${SERVICES[@]}"; do
+  if [[ ! "$service" =~ ^([^:]+):([0-9]+)$ ]]; then
+    echo "Error: Invalid service: $service" >&2
+    echo "" >&2
+    help
+    exit 1
+  fi
+done
+
+if [[ -z "$TIMEOUT" ]]; then
+  echo "Waiting for services (no timeout)..."
+else
+  echo "Waiting for services (timeout: $TIMEOUT seconds)..."
+fi
+
+check_service() {
+  local service="$1"
+  [[ "$service" =~ ^([^:]+):([0-9]+)$ ]]
+  local host="${BASH_REMATCH[1]}"
+  local port="${BASH_REMATCH[2]}"
+  (exec 3<>"/dev/tcp/$host/$port") 2>/dev/null
+}
+
+declare -A PENDING
+
+for service in "${SERVICES[@]}"; do
+  PENDING["$service"]=1
+done
+
+time=0
+
+while true; do
+  for service in "${!PENDING[@]}"; do
+    if check_service "$service"; then
+      echo "✓ $service (available after $time seconds)"
+      unset PENDING["$service"]
+    fi
+  done
+
+  if [[ ${#PENDING[@]} -eq 0 ]]; then
+    exit 0
+  fi
+
+  if [[ -n "$TIMEOUT" ]] && [[ $time -ge $TIMEOUT ]]; then
+    for service in "${!PENDING[@]}"; do
+      echo "✗ $service (timeout exceeded)" >&2
+    done
+    exit 1
+  fi
+
+  sleep 1
+  ((time++)) || true
+done
