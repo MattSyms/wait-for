@@ -50,7 +50,7 @@ Waiting for services (no timeout)...
 
 ### Waiting for Docker services
 
-Starting the `app` service when `mysql` and `redis` are available, with a timeout of `30` seconds:
+Starting an `app` service when `mysql` and `redis` are available, with a timeout of `30` seconds:
 
 ```yml
 services:
@@ -58,10 +58,6 @@ services:
     image: alpine
     entrypoint: echo App started!
     depends_on:
-      mysql:
-        condition: service_started
-      redis:
-        condition: service_started
       wait-for-services:
         condition: service_completed_successfully
 
@@ -76,6 +72,11 @@ services:
   wait-for-services:
     image: mattsyms/wait-for
     command: mysql:3306 redis:6379 -t 30
+    depends_on:
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
 ```
 
 ```txt
@@ -94,7 +95,7 @@ App started!
 
 ### Waiting for Docker services using a healthcheck
 
-Starting the `app` service when `mysql` and `redis` are available, with a timeout of `30` seconds:
+Starting an `app` service when `mysql` and `redis` are available, with a timeout of `30` seconds:
 
 ```yml
 services:
@@ -102,10 +103,6 @@ services:
     image: alpine
     entrypoint: echo App started!
     depends_on:
-      mysql:
-        condition: service_started
-      redis:
-        condition: service_started
       wait-for-services:
         condition: service_healthy
 
@@ -125,6 +122,11 @@ services:
       timeout: 30s
       interval: 1s
       retries: 1
+    depends_on:
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
 ```
 
 ```txt
